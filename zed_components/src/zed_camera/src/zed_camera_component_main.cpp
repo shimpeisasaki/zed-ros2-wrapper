@@ -824,13 +824,6 @@ void ZedCamera::getDebugParams()
     } else {
       RCLCPP_INFO(get_logger(), " + Debug Mode enabled +");
     }
-  } else {
-    rcutils_ret_t res = rcutils_logging_set_logger_level(
-      get_logger().get_name(), RCUTILS_LOG_SEVERITY_INFO);
-
-    if (res != RCUTILS_RET_OK) {
-      RCLCPP_INFO(get_logger(), "Error setting INFO level for logger");
-    }
   }
 
   DEBUG_STREAM_COMM(

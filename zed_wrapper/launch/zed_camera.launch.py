@@ -159,6 +159,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Launch configuration variables
     node_log_type = LaunchConfiguration('node_log_type')
+    container_log_level = LaunchConfiguration('container_log_level')
 
     svo_path = LaunchConfiguration('svo_path')
     publish_svo_clock = LaunchConfiguration('publish_svo_clock')
@@ -393,11 +394,11 @@ def launch_setup(context, *args, **kwargs):
         if distro == 'foxy':
             # Foxy does not support the isolated mode
             container_exec = 'component_container'
-            arguments_val = ['--ros-args', '--log-level', 'info']
+            arguments_val = ['--ros-args', '--log-level', container_log_level]
         else:
             container_exec = 'component_container_isolated'
             arguments_val = ['--use_multi_threaded_executor',
-                             '--ros-args', '--log-level', 'info']
+                             '--ros-args', '--log-level', container_log_level]
             # arguments_val=['--use_multi_threaded_executor','--ros-args', '--log-level', 'debug']
 
         zed_container = ComposableNodeContainer(
@@ -494,6 +495,11 @@ def generate_launch_description():
                 default_value=TextSubstitution(text='both'),
                 description='The log type of the node. It can be `screen`, `log` or `both`. The `log` type will save the log in a file in the `~/.ros/log/` folder. The `screen` type will print the log on the terminal. The `both` type will do both.',
                 choices=['screen', 'log', 'both']),
+            DeclareLaunchArgument(
+                'container_log_level',
+                default_value=TextSubstitution(text='info'),
+                description='ROS log level for the ZED component container.',
+                choices=['debug', 'info', 'warn', 'error', 'fatal']),
             DeclareLaunchArgument(
                 'camera_name',
                 default_value=TextSubstitution(text='zed'),

@@ -99,6 +99,7 @@ void ZedCamera::initVideoDepthPublishers()
 
   // ----> Camera publishers
   auto qos = mQos.get_rmw_qos_profile();
+  const bool publish_compressed = declare_parameter<bool>("video.publish_compressed", true);
 
   // Camera publishers
   if (_nitrosDisabled) {
@@ -231,6 +232,9 @@ void ZedCamera::initVideoDepthPublishers()
       image_transport::Publisher & itPub,
       ImageTopicType type = ImageTopicType::IMAGE) {
         ipcPub = create_ipc_pub(topic);
+        if (!publish_compressed) {
+          return;
+        }
         {
           std::lock_guard<std::mutex> lock(g_it_pub_init_mutex);
           set_transport_plugins(topic, type);

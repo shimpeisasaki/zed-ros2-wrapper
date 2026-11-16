@@ -10,6 +10,9 @@
 
 <hr>
 
+Workspace maintainers: see [local maintenance and adopted references](LOCAL_MAINTENANCE.md)
+for the retained raw-image change, Humble deployment boundary, and safe offline checks.
+
 This package enables the use of ZED cameras with ROS 2, providing access to a variety of data types, including:
 
 - Color and grayscale images, both rectified and unrectified

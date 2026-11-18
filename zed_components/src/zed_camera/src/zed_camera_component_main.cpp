@@ -357,6 +357,32 @@ void ZedCamera::initServices()
 
   std::string srv_prefix = "~/";
 
+  // Temporary interface placement requested by the workspace owner.
+  mSetImageStreamSrv = create_service<d1vision_interfaces::srv::SetImageStream>(
+    "~/set_image_stream",
+    [this](const std::shared_ptr<d1vision_interfaces::srv::SetImageStream::Request> request,
+    std::shared_ptr<d1vision_interfaces::srv::SetImageStream::Response> response) {
+      std::lock_guard<std::mutex> lock(mImageStreamMutex);
+      response->applied_period_sec = mImageStream.period();
+      if (mNodeDeinitialized || mThreadStop || !mZed || !mZed->isOpened()) {
+        response->success = false;
+        response->message = "Camera is not ready or is stopping";
+        return;
+      }
+      const auto boundary = mZed->getTimestamp(
+        (mSvoMode || mSimMode) ? sl::TIME_REFERENCE::IMAGE : sl::TIME_REFERENCE::CURRENT);
+      if (!mImageStream.configure(request->enabled, request->period_sec,
+        mCamGrabFrameRate, boundary.getNanoseconds()))
+      {
+        response->success = false;
+        response->message = "period_sec must be finite, positive and >= 1/grab_frame_rate";
+        return;
+      }
+      response->success = true;
+      response->applied_period_sec = mImageStream.period();
+      response->message = "Applied; actual image rate is capped by grab and general.pub_frame_rate";
+    });
+
 #if (ZED_SDK_MAJOR_VERSION * 10 + ZED_SDK_MINOR_VERSION) >= 52
   // With ZED SDK v5.2 we can use Positional Tracking `GEN_3` even if depth is disabled
   if (!mDepthDisabled || mPosTrkMode == sl::POSITIONAL_TRACKING_MODE::GEN_3) {
@@ -915,6 +941,10 @@ void ZedCamera::getTopicEnableParams()
   sl_tools::getParam(
     shared_from_this(), "video.publish_stereo", mPublishImgStereo,
     mPublishImgStereo, " * Publish Stereo image: ");
+
+  sl_tools::getParam(
+    shared_from_this(), "video.raw_jpeg_only", mRawJpegOnly,
+    mRawJpegOnly, " * Publish only unrectified JPEG images: ");
 
   // Region of Interest topics
   sl_tools::getParam(
@@ -3838,6 +3868,7 @@ bool ZedCamera::startCamera()
 void ZedCamera::closeCamera()
 {
   std::lock_guard<std::mutex> lock(mCloseCameraMutex);
+  std::lock_guard<std::mutex> image_lock(mImageStreamMutex);
   if (mZed == nullptr) {
     return;
   }
@@ -3937,6 +3968,10 @@ void ZedCamera::startPathPubTimer(double pathTimerRate)
 {
   if (mPathTimer != nullptr) {
     mPathTimer->cancel();
+  }
+
+  if (!mPublishPath) {
+    return;
   }
 
   DEBUG_PT("Starting path pub. timer");
@@ -5464,6 +5499,26 @@ void ZedCamera::threadFunc_zedGrab()
 
 bool ZedCamera::publishSensorsData(rclcpp::Time force_ts)
 {
+  // Calibration comes from CameraInformation, not a sampled IMU measurement.
+  publishImuFrameAndTopic();
+  if (!mPublishSensImu && !mPublishSensImuRaw && !mPublishSensMag &&
+    !mPublishSensBaro && !mPublishSensTemp)
+  {
+    // SDK headers do not specify a FIFO size bound. Keep draining at 1 Hz,
+    // discarding the batch without timestamp/decimation/diagnostic processing.
+    // Configured outputs retain the original drain cadence even without readers,
+    // so a later subscriber never replays a backlog. Output flags are read-only.
+    const auto now = std::chrono::steady_clock::now();
+    if (!mSensCameraSync && !mSvoMode && !mSimMode &&
+      now - mLastIdleSensorDrain >= std::chrono::seconds(1))
+    {
+      std::vector<sl::SensorsData> discarded;
+      mZed->getSensorsDataBatch(discarded);
+      mLastIdleSensorDrain = now;
+    }
+    return false;
+  }
+
   if (mGrabStatus != sl::ERROR_CODE::SUCCESS && mGrabStatus != sl::ERROR_CODE::CORRUPTED_FRAME) {
     DEBUG_SENS("Camera not ready. Sensor data not published");
     rclcpp::sleep_for(1s);
@@ -6412,6 +6467,12 @@ void ZedCamera::threadFunc_pubSensorsData()
       }
 
       publishSensorsData();
+      if (!mPublishSensImu && !mPublishSensImuRaw && !mPublishSensMag &&
+        !mPublishSensBaro && !mPublishSensTemp)
+      {
+        rclcpp::sleep_for(100ms);
+        continue;
+      }
 
       // ----> Poll cadence
       // getSensorsDataBatch() drains the whole IMU FIFO on every call and the
@@ -7993,6 +8054,9 @@ void ZedCamera::callback_pubFusedPc()
 
 void ZedCamera::callback_pubPaths()
 {
+  if (!mPublishPath) {
+    return;
+  }
   uint32_t mapPathSub = 0;
   uint32_t odomPathSub = 0;
   uint32_t utmPathSub = 0;

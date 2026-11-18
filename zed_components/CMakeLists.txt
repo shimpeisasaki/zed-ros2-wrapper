@@ -126,6 +126,7 @@ set(DEPENDENCIES
     sensor_msgs
     stereo_msgs
     zed_msgs
+    d1vision_interfaces
     std_srvs
     diagnostic_msgs
     diagnostic_updater
@@ -140,6 +141,7 @@ ament_auto_find_build_dependencies()
 
 find_package(rcutils REQUIRED)
 find_package(zed_msgs)
+find_package(d1vision_interfaces REQUIRED)
 if(zed_msgs_VERSION VERSION_GREATER_EQUAL "5.3.0")
   add_definitions(-DZED_MSGS_ILLUMINANCE_AVAIL)
 endif()
@@ -218,6 +220,10 @@ endif()
 message(STATUS " * Type Adaptation for sl::Mat is enabled")
 
 if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_image_stream_gate test/test_image_stream_gate.cpp)
+  target_include_directories(test_image_stream_gate PRIVATE src/zed_camera/include)
+  add_test(NAME image_stream_gate COMMAND test_image_stream_gate)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
@@ -358,6 +364,14 @@ zed_link_ros_dependencies(zed_camera_one_component ${DEPENDENCIES})
 
 rclcpp_components_register_nodes(zed_camera_one_component "stereolabs::ZedCameraOne")
 set(node_plugins "${node_plugins}stereolabs::ZedCameraOne;$<TARGET_FILE:zed_camera_one_component>\n")
+
+if(BUILD_TESTING)
+  add_executable(test_raw_jpeg_publisher test/test_raw_jpeg_publisher.cpp)
+  target_include_directories(test_raw_jpeg_publisher PRIVATE src/zed_camera/include)
+  zed_link_ros_dependencies(test_raw_jpeg_publisher rclcpp sensor_msgs image_transport)
+  add_test(NAME raw_jpeg_publisher COMMAND test_raw_jpeg_publisher)
+  set_tests_properties(raw_jpeg_publisher PROPERTIES ENVIRONMENT "ROS_DOMAIN_ID=84;ROS_LOCALHOST_ONLY=1")
+endif()
 
 # Install components
 install(TARGETS zed_camera_component zed_camera_one_component

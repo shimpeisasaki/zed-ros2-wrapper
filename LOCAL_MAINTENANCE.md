@@ -27,6 +27,14 @@ compare actual consumers before importing a branch.
 
 ## Offline maintenance
 
+The scoped follow-up for internal unused processing and image publication control
+is [ZED修正の引き継ぎ](ZED_CHANGE_HANDOFF_JA.md). It preserves the existing
+unrectified raw input; the historical proposal describes its original unimplemented state.
+The implemented contract is [ROS image publication control](IMAGE_STREAM.md).
+The agreed image publication default is OFF at startup/restart, enabled only by
+the new service. VIO or the wheel configuration's required IMU stays independent
+of image publication. Existing image consumers will need an explicit ON call.
+
 The [README prerequisites](README.md#prerequisites) for this source list ZED SDK 5.2,
 CUDA and supported ROS environments; the workspace uses ROS 2 Humble.
 Record the actual installed SDK/CUDA versions for a code build rather than treating
@@ -52,3 +60,14 @@ Inspect filenames, sizes, metadata and summaries before SVO/images/clouds/models
 Only read payloads for a named question, with bounded files/topics/time/sample counts.
 Exclude generated output/data/cache from broad searches. Store complete logs separately,
 show bounded causal excerpts and preserve exit codes. Follow [AGENTS.md](AGENTS.md).
+
+Implementation and camera-only test evidence from 2026-11-18 is recorded in
+[the validation record](ZED_CHANGE_VALIDATION_20261118.md). This is not full CAT
+bringup, motor/safety acceptance, simulation, or a D1 inference evaluation.
+
+CAT's adopted profiles now select the explicitly requested
+[raw JPEG-only mode](IMAGE_STREAM.md#adopted-raw-jpeg-output). The historical
+non-compressed path remains the shared wrapper default; CAT JPEG mode creates
+only the compressed raw visual publisher. See the separate
+[JPEG validation record](ZED_JPEG_VALIDATION_20261118.md) for evidence and consumer
+migration limits; earlier non-compressed test records remain historical.

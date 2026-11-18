@@ -16,6 +16,8 @@
 #define ZED_CAMERA_COMPONENT_HPP_
 
 #include <atomic>
+#include <d1vision_interfaces/srv/set_image_stream.hpp>
+#include "image_stream_gate.hpp"
 #include <chrono>
 #include <sl/Camera.hpp>
 #include <sl/Fusion.hpp>
@@ -515,6 +517,7 @@ private:
   bool mPublishImgRaw = false;
   bool mPublishImgGray = false;
   bool mPublishImgRgb = true;
+  bool mRawJpegOnly = false;
   bool mPublishImgStereo = false;
   bool mPublishImgRoiMask = false;
   bool mPublishOdomPose = true;
@@ -1121,6 +1124,11 @@ private:
   std::atomic<bool> mSpatialMappingRunning{false};
   std::atomic<bool> mObjDetRunning{false};
   std::atomic<bool> mBodyTrkRunning{false};
+  // Serializes service updates with image retrieval and DDS publication only.
+  std::mutex mImageStreamMutex;
+  ImageStreamGate mImageStream;
+  std::chrono::steady_clock::time_point mLastIdleSensorDrain;
+  rclcpp::Service<d1vision_interfaces::srv::SetImageStream>::SharedPtr mSetImageStreamSrv;
   bool mRgbSubscribed = false;
   bool mGnssMsgReceived = false;  // Indicates if a NavSatFix topic has been
                                   // received, also with invalid position fix

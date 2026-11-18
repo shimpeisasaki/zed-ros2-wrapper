@@ -23,6 +23,7 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
 #include <image_transport/camera_common.hpp>
+#include "raw_jpeg_publisher.hpp"
 
 namespace
 {
@@ -100,6 +101,15 @@ void ZedCamera::initVideoDepthPublishers()
   // ----> Camera publishers
   auto qos = mQos.get_rmw_qos_profile();
   const bool publish_compressed = declare_parameter<bool>("video.publish_compressed", true);
+  if (mRawJpegOnly && (!_nitrosDisabled || !publish_compressed ||
+    !mPublishImgRgb || !mPublishImgRaw || mPublishImgLeftRight ||
+    mPublishImgGray || mPublishImgStereo || mPublishImgRoiMask || mPublishDisparity))
+  {
+    throw std::invalid_argument(
+      "video.raw_jpeg_only requires NITROS disabled, publish_compressed/rgb/raw=true "
+      "and left_right/gray/stereo/ROI/disparity=false");
+  }
+
 
   // Camera publishers
   if (_nitrosDisabled) {
@@ -231,6 +241,16 @@ void ZedCamera::initVideoDepthPublishers()
       adaptedImagePub & ipcPub,
       image_transport::Publisher & itPub,
       ImageTopicType type = ImageTopicType::IMAGE) {
+        if (mRawJpegOnly && type == ImageTopicType::IMAGE) {
+          if (topic != mRgbRawTopic) {
+            return;  // No rectified or other visual image publisher, even without readers.
+          }
+          std::lock_guard<std::mutex> lock(g_it_pub_init_mutex);
+          itPub = makeRawJpegPublisher(this, topic, qos);
+          RCLCPP_INFO_STREAM(get_logger(), " * Advertised on topic: " <<
+            itPub.getTopic() << "/compressed [JPEG only]");
+          return;
+        }
         ipcPub = create_ipc_pub(topic);
         if (!publish_compressed) {
           return;
@@ -377,8 +397,10 @@ void ZedCamera::initVideoDepthPublishers()
     };
 
   if (mPublishImgRgb) {
-    mPubRgbCamInfo = make_cam_info_pub(mRgbTopic);
-    mPubRgbCamInfoTrans = make_cam_info_trans_pub(mRgbTopic);
+    if (!mRawJpegOnly) {
+      mPubRgbCamInfo = make_cam_info_pub(mRgbTopic);
+      mPubRgbCamInfoTrans = make_cam_info_trans_pub(mRgbTopic);
+    }
     if (mPublishImgGray) {
       mPubRgbGrayCamInfo = make_cam_info_pub(mRgbGrayTopic);
       mPubRgbGrayCamInfoTrans = make_cam_info_trans_pub(mRgbGrayTopic);
@@ -1553,15 +1575,24 @@ void ZedCamera::retrieveVideoDepth(bool gpu)
   bool retrieved_video = false;
   bool retrieved_depth = false;
 
-  DEBUG_STREAM_VD(" *** Retrieving Video Data ***");
-  retrieved_video |= retrieveLeftImage(gpu);
-  retrieved_video |= retrieveLeftRawImage(gpu);
-  retrieved_video |= retrieveRightImage(gpu);
-  retrieved_video |= retrieveRightRawImage(gpu);
-  retrieved_video |= retrieveLeftGrayImage(gpu);
-  retrieved_video |= retrieveLeftRawGrayImage(gpu);
-  retrieved_video |= retrieveRightGrayImage(gpu);
-  retrieved_video |= retrieveRightRawGrayImage(gpu);
+  {
+    std::lock_guard<std::mutex> image_lock(mImageStreamMutex);
+    const auto image_ns = mZed->getTimestamp(sl::TIME_REFERENCE::IMAGE).getNanoseconds();
+    mImageStream.retrieved(image_ns, false);
+    if (mImageStream.due(image_ns))
+    {
+      DEBUG_STREAM_VD(" *** Retrieving Video Data ***");
+      retrieved_video |= retrieveLeftImage(gpu);
+      retrieved_video |= retrieveLeftRawImage(gpu);
+      retrieved_video |= retrieveRightImage(gpu);
+      retrieved_video |= retrieveRightRawImage(gpu);
+      retrieved_video |= retrieveLeftGrayImage(gpu);
+      retrieved_video |= retrieveLeftRawGrayImage(gpu);
+      retrieved_video |= retrieveRightGrayImage(gpu);
+      retrieved_video |= retrieveRightRawGrayImage(gpu);
+      mImageStream.retrieved(image_ns, retrieved_video);
+    }
+  }
 
   if (retrieved_video) {
     DEBUG_STREAM_VD(" *** Video Data retrieved ***");
@@ -1813,19 +1844,28 @@ void ZedCamera::publishVideoDepth(rclcpp::Time & out_pub_ts)
   rclcpp::Time timeStamp;
 
   if (!checkGrabAndUpdateTimestamp(timeStamp)) {
+    publishCameraInfos();
     return;
   }
 
-  publishLeftAndRgbImages(timeStamp);
-  publishLeftRawAndRgbRawImages(timeStamp);
-  publishLeftGrayAndRgbGrayImages(timeStamp);
-  publishLeftRawGrayAndRgbRawGrayImages(timeStamp);
-  publishRightImages(timeStamp);
-  publishRightRawImages(timeStamp);
-  publishRightGrayImages(timeStamp);
-  publishRightRawGrayImages(timeStamp);
-  publishStereoImages(timeStamp);
-  publishStereoRawImages(timeStamp);
+  {
+    std::lock_guard<std::mutex> image_lock(mImageStreamMutex);
+    if (mImageStream.take())
+    {
+      publishLeftAndRgbImages(timeStamp);
+      publishLeftRawAndRgbRawImages(timeStamp);
+      publishLeftGrayAndRgbGrayImages(timeStamp);
+      publishLeftRawGrayAndRgbRawGrayImages(timeStamp);
+      publishRightImages(timeStamp);
+      publishRightRawImages(timeStamp);
+      publishRightGrayImages(timeStamp);
+      publishRightRawGrayImages(timeStamp);
+      publishStereoImages(timeStamp);
+      publishStereoRawImages(timeStamp);
+    } else {
+      publishCameraInfos();
+    }
+  }
   publishDepthImage(timeStamp);
   publishConfidenceMap(timeStamp);
   publishDisparity(timeStamp);

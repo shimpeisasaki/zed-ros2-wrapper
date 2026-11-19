@@ -9,10 +9,12 @@ CameraInfo, depth/disparity/confidence, point clouds and SDK streaming are outsi
 this gate. Keep one controlling client; no automatic retries or owner arbitration.
 
 The service `/zed/zed_node/set_image_stream` uses
-`d1vision_interfaces/srv/SetImageStream`. Its temporary placement in D1 interfaces
-is explicitly requested for this change and should be revisited during D1
-refactoring. The ZED wrapper implements the callback and settings; no D1 manager,
-model, crop, task registration or navigation code is required or started.
+`d1vision_interfaces/srv/SetImageStream`. The interface definition is owned by
+D1 alongside its image and task interfaces; rotating panorama capture interfaces
+remain in CAT. The ZED wrapper implements the callback and settings; no model,
+crop or navigation code is required or started by the wrapper.
+The optional [D1 manager](../d1vision_ros2/docs/CONTINUOUS_D1_JA.md) is a separate
+client and owns task-driven ON/OFF; do not run another controlling client with it.
 
 | Direction | Field | Contract |
 |---|---|---|
@@ -97,13 +99,15 @@ quality/size depends on scene content. Existing D1 offline results are historica
 uncompressed inputs and are not JPEG recognition-accuracy validation.
 
 Consumers must subscribe as CompressedImage or use image_transport's `compressed`
-transport. `cat_capture` currently subscribes to Image, the operator GUI's
-recording preset still names the former Image topic, RViz uses its old display
-configuration, and D1's offline frame extractor defaults to the historical
-Image topic/decoder. These consumers need a separate JPEG migration before use
-with new JPEG recordings. No compatibility Image republisher is started, since
-that would defeat the requested output restriction. Existing datasets, labels,
-Logbooks and archived input identities are unchanged.
+transport. CAT capture now saves the original JPEG bytes, the operator GUI recording
+preset and standard RViz display use the compressed topic, and D1's extractor
+copies compressed JPEG while retaining explicit legacy Image input. See the
+[JPEG input guide](../d1vision_ros2/docs/JPEG_INPUT_JA.md) and
+[CAT capture](../cat_robot/cat_capture/README.md). These consumers do not enable
+image publication automatically. Keep a single controlling client.
+No compatibility Image republisher is started. Existing datasets, labels,
+Logbooks and archived input identities are unchanged. The migration has offline
+coverage; real-camera integration and recognition quality remain unverified.
 
 Implementation reference: installed `compressed_image_transport` 2.5.5,
 [source codec and metadata handling](https://github.com/ros-perception/image_transport_plugins/blob/2.5.5/compressed_image_transport/src/compressed_publisher.cpp).

@@ -71,3 +71,11 @@ non-compressed path remains the shared wrapper default; CAT JPEG mode creates
 only the compressed raw visual publisher. See the separate
 [JPEG validation record](ZED_JPEG_VALIDATION_20261118.md) for evidence and consumer
 migration limits; earlier non-compressed test records remain historical.
+
+The 2026-11-19 CAT refactor keeps the generic wrapper implementation unchanged.
+CAT now expands an explicit common/profile pair inside its supervisor and passes
+one materialized override to this wrapper; standalone custom ROS YAML remains
+unchanged. See [current CAT startup](../cat_robot/docs/startup.md) and
+[offline refactor verification](CAT_REFACTOR_VALIDATION_20261119.md).
+The current D1 main is JPEG-only; legacy Image/BGR task/extractor descriptions in
+dated records are historical and do not authorize restoring old exploration adapters.

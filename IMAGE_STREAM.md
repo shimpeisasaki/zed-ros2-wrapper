@@ -45,7 +45,9 @@ available. CAT now adopts JPEG-only mode as described below.
 
 ## Adopted raw JPEG output
 
-Both CAT profiles (`zed_vio.yaml`, `zed_sensors.yaml`) now set:
+Both CAT supervisor profiles (`zed_vio.yaml`, `zed_sensors.yaml`) explicitly
+reference `zed_common.yaml`; the supervisor materializes one complete override
+and keeps it alive until its wrapper process group stops. Their effective values are:
 
 ```yaml
 video:
@@ -100,8 +102,9 @@ uncompressed inputs and are not JPEG recognition-accuracy validation.
 
 Consumers must subscribe as CompressedImage or use image_transport's `compressed`
 transport. CAT capture now saves the original JPEG bytes, the operator GUI recording
-preset and standard RViz display use the compressed topic, and D1's extractor
-copies compressed JPEG while retaining explicit legacy Image input. See the
+preset and standard RViz display use the compressed topic. CAT capture is JPEG-only;
+its former Image/BGR transport selector and re-encoding path are retired.
+The current D1 main extractor and runtime also accept JPEG only. See the
 [JPEG input guide](../d1vision_ros2/docs/JPEG_INPUT_JA.md) and
 [CAT capture](../cat_robot/cat_capture/README.md). These consumers do not enable
 image publication automatically. Keep a single controlling client.
@@ -142,6 +145,12 @@ source install/zed_check/setup.bash
 
 Runtime calls and CAT operational ownership are documented in
 [cat_bringup](../cat_robot/cat_bringup/README.md).
+The current source/build/install order and the three preserved odometry modes are
+in [CAT startup](../cat_robot/docs/startup.md). CAT profile fragments are selected
+through the supervisor's `--config` / CAT `zed_config`, rather than passed directly
+to the generic wrapper. Standalone custom ROS override files still pass through
+unchanged. The generic wrapper's non-CAT Image/rectified/gray/left/right paths
+and parameter-layer precedence are unchanged.
 The CTests `image_stream_gate` and `raw_jpeg_publisher` check scheduling and a
 synthetic JPEG fixture without a camera.
 Build with `-DBUILD_TESTING=ON`, then run `colcon test --packages-select
